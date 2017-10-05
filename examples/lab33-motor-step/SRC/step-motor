@@ -1,0 +1,228 @@
+#include"DSP2833x_Device.h"
+#include"DSP2833x_Examples.h"
+
+#define StepA_ON   GpioDataRegs.GPASET.bit.GPIO0=1 //自定义步进机的四相GPIO口
+#define StepA_OFF  GpioDataRegs.GPACLEAR.bit.GPIO0=1
+#define StepB_ON   GpioDataRegs.GPASET.bit.GPIO1=1
+#define StepB_OFF  GpioDataRegs.GPACLEAR.bit.GPIO1=1
+#define StepC_ON   GpioDataRegs.GPASET.bit.GPIO2=1
+#define StepC_OFF  GpioDataRegs.GPACLEAR.bit.GPIO2=1
+#define StepD_ON   GpioDataRegs.GPASET.bit.GPIO3=1
+#define StepD_OFF  GpioDataRegs.GPACLEAR.bit.GPIO3=1
+
+#define DCA_ON     GpioDataRegs.GPASET.bit.GPIO4=1  //自定义直流电机的两相GPIO口
+#define DCA_OFF    GpioDataRegs.GPACLEAR.bit.GPIO4=1
+#define DCB_ON     GpioDataRegs.GPASET.bit.GPIO5=1
+#define DCB_OFF    GpioDataRegs.GPACLEAR.bit.GPIO5=1
+
+unsigned char sign1=1;
+
+void ConfigtestGpio(void);         // 配置为普通IO口输出
+interrupt void ISRTimer0(void);    // 定时器0
+interrupt void KEY_ONSHUT(void);  // 开关选择
+interrupt void KEY_DECE(void);    // 减速选择
+interrupt void KEY_ACCE(void);    // 加速选择
+interrupt void KEY_DIRECT(void);     // 转动方向选择
+
+unsigned char sa=1; //步进机四相通电分配顺序
+unsigned char direct_st=1,direct_dc=1;//步进机转动方向标志direct_st，1正向，2反向
+                                     //直流机转动方向标志direct_dc，1正向，2反向
+unsigned char step_speed=0;   // 转速等级标志位，分20Hz，40，60，80，100Hz五级
+float time=20000;  // 定时器定时时长，us级，默认为1000ms，1Hz
+
+void main(void)
+{
+  InitSysCtrl(); //初始化
+  InitXintf16Gpio();//
+  DINT;//
+  InitPieCtrl();//
+  IER=0x0000;//
+  IFR=0x0000;//
+  InitPieVectTable();//
+
+  EALLOW;//
+  PieVectTable.TINT0=&ISRTimer0;//中断函数地址赋给TINT0
+  PieVectTable.XINT5=&KEY_ONSHUT;// 按键S4
+  PieVectTable.XINT6=&KEY_ACCE;// 按键S5
+  PieVectTable.XINT4=&KEY_DECE;// 按键S3
+  PieVectTable.XINT3=&KEY_DIRECT;// 按键S2
+ 
+  EDIS;//
+
+  InitCpuTimers();//
+  ConfigCpuTimer(&CpuTimer0,150,10000); // 定时时间为time
+  StartCpuTimer0();//
+  // 使能CPU相应的中断允许
+
+  // 用到的中断对应的 PIE 中使能相应的中断允许位
+  PieCtrlRegs.PIECTRL.bit.ENPIE=1;
+  PieCtrlRegs.PIEIER1.bit.INTx7 = 1;
+  PieCtrlRegs.PIEIER12.bit.INTx1 = 1;
+  PieCtrlRegs.PIEIER12.bit.INTx2 = 1;
+  PieCtrlRegs.PIEIER12.bit.INTx3 = 1;
+  PieCtrlRegs.PIEIER12.bit.INTx4 = 1;
+
+  IER |= M_INT1;  // 第一组中断允许
+  IER |= M_INT12; // 第十二组中断允许
+
+  EINT;//
+  ERTM;//
+
+  ConfigtestGpio();
+  StepA_ON;  //步进机IO初始化
+  DELAY_US(10);
+  StepB_ON;
+  DELAY_US(10);
+  StepC_ON;
+  DELAY_US(10);
+  StepD_ON;
+  DELAY_US(10);
+  DCA_ON;
+  DELAY_US(10);
+  DCB_OFF;
+  DELAY_US(10);
+
+  for(; ;)
+  {
+   }
+}
+
+interrupt void ISRTimer0(void)//定时中断函数
+{
+  CpuTimer0.InterruptCount++; //   
+  PieCtrlRegs.PIEACK.all = PIEACK_GROUP1; //
+  CpuTimer0Regs.TCR.bit.TIF=1; //    
+  CpuTimer0Regs.TCR.bit.TRB=1;
+
+   switch(sa)
+   {
+      case 1: StepA_OFF; StepB_ON;  StepC_ON;  StepD_ON; break;//分配顺序1
+      case 2: StepA_OFF; StepB_OFF; StepC_ON;  StepD_ON; break;//分配顺序2
+      case 3: StepA_ON;  StepB_OFF; StepC_ON;  StepD_ON; break;//分配顺序3
+      case 4: StepA_ON;  StepB_OFF; StepC_OFF; StepD_ON; break;//分配顺序4
+      case 5: StepA_ON;  StepB_ON;  StepC_OFF; StepD_ON; break;//分配顺序5
+      case 6: StepA_ON;  StepB_ON;  StepC_OFF; StepD_OFF;break;//分配顺序6
+      case 7: StepA_ON;  StepB_ON;  StepC_ON;  StepD_OFF;break;//分配顺序7
+      case 8: StepA_OFF; StepB_ON;  StepC_ON;  StepD_OFF;break;//分配顺序8
+   }
+
+   switch(direct_st) //判断步进机转动方向
+   {
+      case 1: if(sa==8) //正向
+                 sa=1; 
+                else
+                 sa++;  break;
+      case 0: if(sa==1) //反向
+                 sa=8; 
+                else
+                 sa--;  break;
+   }
+
+  
+}
+
+
+interrupt void KEY_ONSHUT(void)  //开关
+{
+  DELAY_US(50);
+  PieCtrlRegs.PIEACK.all = PIEACK_GROUP12;
+  switch(sign1)
+  {
+    case 1: StopCpuTimer0();sign1=0; break;
+	case 0: StartCpuTimer0();sign1=1;break;
+  }
+}
+
+interrupt void KEY_ACCE(void)  // 加速
+{
+  DELAY_US(50);
+  PieCtrlRegs.PIEACK.all = PIEACK_GROUP12;
+    if(step_speed==5)
+           ;
+     else
+      {
+        step_speed++;
+        switch(step_speed)  // 
+        {
+         case 1:time=20000;break;
+	     case 2:time=17000;break;
+	     case 3:time=14000;break;
+	     case 4:time=11000;break;
+	     case 5:time=8000; break;
+         case 6:time=5000; break;
+        }
+        InitCpuTimers();//
+        ConfigCpuTimer(&CpuTimer0,150,time); // 重载定时器
+        StartCpuTimer0();//
+	  }
+}
+
+interrupt void KEY_DECE(void)  // 减速
+{
+  DELAY_US(50);
+  PieCtrlRegs.PIEACK.all = PIEACK_GROUP12;
+    if(step_speed==1)    //
+           ;
+    else
+     {
+       step_speed--;
+       switch(step_speed)  // 
+       {
+         case 1:time=20000;break;
+	     case 2:time=17000;break;
+	     case 3:time=14000;break;
+	     case 4:time=11000;break;
+	     case 5:time=8000; break;
+         case 6:time=5000; break;
+       }
+        InitCpuTimers();//
+        ConfigCpuTimer(&CpuTimer0,150,time); // 重载定时器
+        StartCpuTimer0();//
+	  }
+}
+
+
+interrupt void KEY_DIRECT(void)  //正向，反向
+{
+  DELAY_US(50);
+  PieCtrlRegs.PIEACK.all = PIEACK_GROUP12;
+  switch(direct_st)
+  {
+    case 1: direct_st=0;break;
+	case 0: direct_st=1;break;
+  }
+
+  switch(direct_dc)
+  {
+    case 1: direct_dc=0;DCA_ON;DCB_OFF;break;
+	case 0: direct_dc=1;DCA_OFF;DCB_ON;break;
+  }
+} 
+
+void ConfigtestGpio()
+{
+  EALLOW;
+  GpioCtrlRegs.GPAMUX1.bit.GPIO0=0;
+  GpioCtrlRegs.GPADIR.bit.GPIO0=1;
+  
+  GpioCtrlRegs.GPAMUX1.bit.GPIO1=0;
+  GpioCtrlRegs.GPADIR.bit.GPIO1=1;
+
+  GpioCtrlRegs.GPAMUX1.bit.GPIO2=0;
+  GpioCtrlRegs.GPADIR.bit.GPIO2=1;
+
+  GpioCtrlRegs.GPAMUX1.bit.GPIO3=0;
+  GpioCtrlRegs.GPADIR.bit.GPIO3=1;
+
+  GpioCtrlRegs.GPAMUX1.bit.GPIO4=0;
+  GpioCtrlRegs.GPADIR.bit.GPIO4=1;
+
+  GpioCtrlRegs.GPAMUX1.bit.GPIO5=0;
+  GpioCtrlRegs.GPADIR.bit.GPIO5=1;
+  EDIS;
+}
+
+
+//===========================================================================
+// No more.
+//===========================================================================

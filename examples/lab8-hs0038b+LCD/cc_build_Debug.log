@@ -1,0 +1,10 @@
+-----------------------------  DHT11.pjt - Debug  -----------------------------
+[main.c] "D:\CCStudio_v3.3\C2000\cgtools\bin\cl2000" -g -pdsw225 -fr"D:/MyProjects/example/YX28335PRO-V100/lab8-hs0038b+LCD/Debug" -i"D:/MyProjects/example/YX28335PRO-V100/lab8-hs0038b+LCD/INCLUDE" -d"_DEBUG" -d"LARGE_MODEL" -ml -v28 --float_support=fpu32 -@"../Debug.lkf" "main.c"
+"main.c", line 16: warning: variable "j" was declared but never referenced
+"main.c", line 167: warning: function declared implicitly
+
+[Linking...] "D:\CCStudio_v3.3\C2000\cgtools\bin\cl2000" -@"Debug.lkf"
+<Linking>
+
+Build Complete,
+  0 Errors, 2 Warnings, 0 Remarks.

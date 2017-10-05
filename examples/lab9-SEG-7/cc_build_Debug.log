@@ -1,0 +1,8 @@
+------------------------------  SEG.pjt - Debug  ------------------------------
+[seg.c] "D:\CCStudio_v3.3\C2000\cgtools\bin\cl2000" -g -pdsw225 -fr"D:/MyProjects/example/YX28335PRO-V100/lab1-SEG-7/Debug" -i"D:/MyProjects/example/YX28335PRO-V100/lab1-SEG-7/INCLUDE" -d"_DEBUG" -d"LARGE_MODEL" -ml -v28 --float_support=fpu32 -@"../Debug.lkf" "seg.c"
+
+[Linking...] "D:\CCStudio_v3.3\C2000\cgtools\bin\cl2000" -@"Debug.lkf"
+<Linking>
+
+Build Complete,
+  0 Errors, 0 Warnings, 0 Remarks.
